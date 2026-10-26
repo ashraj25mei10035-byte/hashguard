@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HashGuard – File Integrity & Hash Toolkit</title>
+<style>
+:root{--bg:#120c1f;--card:#1c1430;--line:#34265a;--txt:#efe9ff;--mut:#a597cf;--ok:#2ecc71;--bad:#ff4d6d;--acc:#a06bff}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+header{padding:28px 16px 8px;text-align:center}h1{margin:0;font-size:2rem}h1 span{color:var(--acc)}
+header p{color:var(--mut);margin:6px 0 0}
+main{max-width:860px;margin:auto;padding:16px;display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+h2{margin:0 0 12px;font-size:1.1rem}
+textarea,input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#120c22;color:var(--txt);font-size:1rem;font-family:inherit}
+textarea{min-height:90px;resize:vertical}
+button{padding:11px 16px;border:0;border-radius:10px;background:var(--acc);color:#fff;font-weight:700;cursor:pointer;margin-top:8px}
+button.alt{background:#352a5c}
+.out{margin-top:10px;display:grid;gap:8px}
+.h{background:#120c22;border-radius:10px;padding:10px;word-break:break-all;font-family:Consolas,monospace;font-size:.85rem}
+.h small{display:block;color:var(--mut);font-family:system-ui;margin-bottom:2px}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;color:var(--mut);cursor:pointer}
+.drop.on{border-color:var(--acc);background:#241a40}
+#verdict{margin-top:10px;padding:12px;border-radius:10px;display:none;font-weight:700}
+footer{text-align:center;color:var(--mut);padding:20px;font-size:.85rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>Hash<span>Guard</span></h1>
+  <p>Generate hashes, verify file integrity and detect tampered downloads. Everything runs in your browser.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>📁 File Integrity Checker</h2>
+    <div class="drop" id="drop">Drag &amp; drop a file here, or click to choose<input type="file" id="file" hidden></div>
+    <div id="fname" style="margin-top:8px;color:var(--mut)"></div>
+    <div class="out" id="fileOut"></div>
+    <input type="text" id="expected" placeholder="Paste the official hash here to compare (optional)" style="margin-top:10px">
+    <div id="verdict"></div>
+  </section>
+
+  <section class="card">
+    <h2>🔐 Text Hash Generator</h2>
+    <textarea id="txt" placeholder="Type or paste text…"></textarea>
+    <div class="out" id="txtOut"></div>
+  </section>
+
+  <section class="card">
+    <h2>🔎 Hash Type Identifier</h2>
+    <input type="text" id="ident" placeholder="Paste a hash to identify its type">
+    <div class="out"><div class="h" id="identOut">Waiting for input…</div></div>
+  </section>
+
+  <section class="card">
+    <h2>🔁 Base64 Encoder / Decoder</h2>
+    <textarea id="b64" placeholder="Enter text or Base64"></textarea>
+    <button id="enc">Encode</button> <button class="alt" id="dec">Decode</button>
+    <div class="out"><div class="h" id="b64Out">Result appears here</div></div>
+  </section>
+</main>
+<footer>HashGuard · Cybersecurity Awareness Project · Campus Outreach Team</footer>
+
+<script>
+var ALGOS=["SHA-1","SHA-256","SHA-384","SHA-512"];
+function $(id){return document.getElementById(id)}
+function esc(s){return String(s).replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c]})}
+function toHex(buf){return Array.prototype.map.call(new Uint8Array(buf),function(b){return("0"+b.toString(16)).slice(-2)}).join("")}
+function hashAll(data){
+  return Promise.all(ALGOS.map(function(a){return crypto.subtle.digest(a,data).then(function(b){return[a,toHex(b)]})}));
+}
+function showHashes(el,list){el.innerHTML=list.map(function(x){return '<div class="h"><small>'+x[0]+'</small>'+x[1]+'</div>'}).join("")}
+
+$("txt").addEventListener("input",function(){
+  var v=$("txt").value;if(!v){$("txtOut").innerHTML="";return}
+  hashAll(new TextEncoder().encode(v)).then(function(l){showHashes($("txtOut"),l)});
+});
+
+var current=[];
+function compare(){
+  var e=$("expected").value.trim().toLowerCase(),box=$("verdict");
+  if(!e||!current.length){box.style.display="none";return}
+  var hit=current.filter(function(x){return x[1]===e})[0];box.style.display="block";
+  if(hit){box.style.background="#12452a";box.textContent="✅ MATCH – file is authentic ("+hit[0]+"). Not tampered."}
+  else{box.style.background="#5a1426";box.textContent="❌ NO MATCH – file may be corrupted or tampered. Do not trust it!"}
+}
+function handleFile(f){
+  if(!f)return;$("fname").textContent=f.name+" ("+(f.size/1024).toFixed(1)+" KB)";$("fileOut").innerHTML="Calculating…";
+  var r=new FileReader();
+  r.onload=function(){hashAll(r.result).then(function(l){current=l;showHashes($("fileOut"),l);compare()})};
+  r.readAsArrayBuffer(f);
+}
+$("drop").onclick=function(){$("file").click()};
+$("file").onchange=function(){handleFile($("file").files[0])};
+$("drop").ondragover=function(e){e.preventDefault();$("drop").className="drop on"};
+$("drop").ondragleave=function(){$("drop").className="drop"};
+$("drop").ondrop=function(e){e.preventDefault();$("drop").className="drop";handleFile(e.dataTransfer.files[0])};
+$("expected").addEventListener("input",compare);
+
+$("ident").addEventListener("input",function(){
+  var v=$("ident").value.trim(),o=$("identOut");
+  if(!v){o.textContent="Waiting for input…";return}
+  if(!/^[0-9a-fA-F]+$/.test(v)){o.textContent="Not a plain hex hash. It may be bcrypt, Base64 or another format.";return}
+  var m={32:"MD5 (or NTLM) – 128 bit, broken, do not use for security",40:"SHA-1 – 160 bit, deprecated",56:"SHA-224 – 224 bit",64:"SHA-256 – 256 bit, secure",96:"SHA-384 – 384 bit, secure",128:"SHA-512 – 512 bit, secure"};
+  o.textContent=m[v.length]||("Unknown type ("+v.length+" hex characters)");
+});
+
+function b64enc(s){var b=new TextEncoder().encode(s),t="";for(var i=0;i<b.length;i++)t+=String.fromCharCode(b[i]);return btoa(t)}
+function b64dec(s){var t=atob(s.trim()),a=new Uint8Array(t.length);for(var i=0;i<t.length;i++)a[i]=t.charCodeAt(i);return new TextDecoder().decode(a)}
+$("enc").onclick=function(){try{$("b64Out").textContent=b64enc($("b64").value)}catch(e){$("b64Out").textContent="Error: "+e.message}};
+$("dec").onclick=function(){try{$("b64Out").textContent=b64dec($("b64").value)}catch(e){$("b64Out").textContent="Invalid Base64 input."}};
+</script>
+</body>
+</html>
